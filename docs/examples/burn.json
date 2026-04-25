@@ -1,0 +1,7 @@
+{
+  "p": "edmt",
+  "op": "emt-burn",
+  "tick": "enat",
+  "amt": "250000",
+  "src": "balance"
+}
