@@ -26,6 +26,16 @@ Protocol operations are ordinary Ethereum transactions whose calldata contains a
 > [!IMPORTANT]
 > eDMT is not a token contract. The base protocol has no contract storage, no protocol administrator, no pause function, and no upgrade key. This repository specifies the protocol layer only.
 
+## Core Thesis
+
+eDMT turns Ethereum block burn into a permissionless mint-right market.
+
+Every Ethereum block produces a burn event. eDMT lets anyone compete to capture that event with calldata. The first valid mint in canonical chain order owns that block's eNAT.
+
+The protocol does not sell mints, set a mint price, run a whitelist, or define a bonding curve. Ethereum blockspace itself prices the mint right.
+
+eNAT is not a redemption claim on burned ETH. It is a provenance claim over a specific Ethereum burn event.
+
 ## Protocol Invariants
 
 | Property | Rule |
