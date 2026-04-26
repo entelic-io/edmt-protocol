@@ -23,8 +23,9 @@ Each protocol instance has an explicit chain context:
 | --- | --- | --- |
 | `chain_id` | uint64 | EVM chain id returned by `eth_chainId`. |
 | `eip1559_activation_block` | uint64 | First block on that chain whose header contains a non-null `baseFeePerGas`. |
+| `capture_fee_activation_block` | optional uint64 | Target block threshold at which mint capture fee becomes mandatory. If absent, capture fee is disabled. |
 
-A compliant indexer MUST NOT assume default values. Both fields MUST be explicitly configured.
+A compliant indexer MUST NOT assume default values for `chain_id` or `eip1559_activation_block`. Both fields MUST be explicitly configured. `capture_fee_activation_block` MAY be absent only when capture fee is disabled for that protocol instance.
 
 For Ethereum mainnet:
 
@@ -39,6 +40,27 @@ N >= ChainContext.eip1559_activation_block
 ```
 
 Blocks before EIP-1559 activation are outside the protocol because they do not contain the base fee field.
+
+### 2.1 Capture Fee Parameters
+
+When `capture_fee_activation_block` is configured, it is evaluated against the target block in `emt-mint.blk`, not against the block that contains the mint transaction.
+
+Default capture fee parameters:
+
+| Parameter | Value | Meaning |
+| --- | ---: | --- |
+| `window_blocks` | `1000` | Number of previous indexed blocks used for fee statistics. |
+| `target_mint_rate_bps` | `3000` | Target post-activation mint rate, in basis points. |
+| `min_multiplier_bps` | `2500` | Minimum congestion multiplier, 0.25x. |
+| `max_multiplier_bps` | `40000` | Maximum congestion multiplier, 4x. |
+
+For a target block `N`:
+
+- if `capture_fee_activation_block` is absent, capture fee is not required;
+- if `N < capture_fee_activation_block`, capture fee is not required;
+- if `N >= capture_fee_activation_block`, capture fee is required.
+
+Capture fee is paid and destroyed from the sender's protocol-layer raw fragment balance. It is not paid through an application contract, token allowance, or any other external asset representation.
 
 ## 3. Element
 
@@ -129,9 +151,17 @@ Mint claims one eNAT for one block.
   "p": "edmt",
   "op": "emt-mint",
   "tick": "enat",
-  "blk": "<block_number>"
+  "blk": "<block_number>",
+  "fee": "<optional_capture_fee_gwei>"
 }
 ```
+
+Fields:
+
+| Field | Rule |
+| --- | --- |
+| `blk` | Decimal positive integer string, target block to claim. |
+| `fee` | Optional decimal non-negative integer string, unit gwei. Required only when capture fee applies. |
 
 A block `N` can be minted if and only if all of the following are true:
 
@@ -140,11 +170,35 @@ A block `N` can be minted if and only if all of the following are true:
 3. no earlier valid mint has claimed `N` for the same ticker;
 4. the mint calldata is valid;
 5. the mint transaction is not in a reverted transaction;
-6. the Ethereum transaction `to` field equals the transaction `from` field.
+6. the Ethereum transaction `to` field equals the transaction `from` field;
+7. if capture fee applies, `fee` is present and greater than or equal to the required capture fee;
+8. if capture fee applies, the sender has enough raw fragment balance to pay `fee`.
+
+When capture fee applies, `fee` is consumed from the sender's fragment FIFO queue and destroyed, reducing protocol circulation by the consumed amount. If `fee` is greater than the required capture fee, the full declared amount is consumed and destroyed. Overpayment is valid and has no refund path.
 
 On success, the sender receives one whole eNAT whose internal burn amount is `burn(N)`.
 
 There is no artificial burn threshold, era split, supply cap, premine, reservation, or protocol-level allocation.
+
+### 7.1 Required Capture Fee
+
+For a mint transaction included in block `T`, the required capture fee is computed from already indexed blocks before `T`.
+
+Definitions:
+
+```text
+window = previous window_blocks blocks before T
+median_burn_gwei = median of burn(block) across window
+future_mints = accepted mints in window whose target blk >= capture_fee_activation_block
+actual_mint_rate_bps = floor(future_mints * 10000 / window_blocks)
+raw_multiplier_bps = floor(actual_mint_rate_bps * 10000 / target_mint_rate_bps)
+multiplier_bps = clamp(raw_multiplier_bps, min_multiplier_bps, max_multiplier_bps)
+required_fee = ceil(median_burn_gwei * multiplier_bps / 10000)
+```
+
+If capture fee applies and `required_fee` would be `0`, the required fee is `1` gwei.
+
+The computation is deterministic and uses integer arithmetic only.
 
 ## 8. Transfer
 
@@ -290,6 +344,7 @@ Compliant indexers MUST apply the following JSON rules:
 - Legal JSON whitespace is accepted.
 - Field names and string values are case-sensitive.
 - Numeric fields such as `amt` and `blk` MUST be decimal positive integer strings.
+- `fee`, when present, MUST be a decimal non-negative integer string.
 - Hex numbers, decimals, scientific notation, negative numbers, empty strings, and leading zero forms such as `"007"` are invalid.
 - Unknown fields MUST be ignored.
 - Unknown operations MUST be ignored.
@@ -307,6 +362,11 @@ Compliant indexers MUST apply the following JSON rules:
 | `blk` has leading zeroes | reject |
 | `blk < eip1559_activation_block` | reject |
 | `blk > current chain head` for mint | reject |
+| capture fee required and `fee` is absent | reject |
+| capture fee required and `fee < required_fee` | reject |
+| capture fee required and sender fragment balance is insufficient | reject |
+| capture fee not required and `fee` is absent | accept if all other mint rules pass |
+| capture fee not required and `fee == "0"` | accept if all other mint rules pass |
 | `to` is not `0x` plus 40 hex characters | reject |
 | `tick != "enat"` for canonical eNAT operations | reject |
 | transfer `to == tx.from` | reject |

@@ -66,6 +66,26 @@ JSON payload:
 
 The Ethereum transaction sender becomes the owner if the mint is valid and first for that block.
 
+If the target block is at or after `capture_fee_activation_block`, the mint payload MUST include `fee`:
+
+```text
+data:,{"p":"edmt","op":"emt-mint","tick":"enat","blk":"1705479","fee":"12000000"}
+```
+
+JSON payload:
+
+```json
+{
+  "p": "edmt",
+  "op": "emt-mint",
+  "tick": "enat",
+  "blk": "1705479",
+  "fee": "12000000"
+}
+```
+
+`fee` is a gwei amount paid from the sender's raw fragment balance and destroyed by the protocol indexer. Before capture fee activation, `fee` may be omitted or set to `"0"`.
+
 ## 4. Transfer a Whole eNAT
 
 ```text
@@ -182,6 +202,12 @@ These are valid:
 {"op":"emt-mint","blk":"1","tick":"enat","p":"edmt"}
 ```
 
+When capture fee applies, this is valid if `12000000` is greater than or equal to the required fee and the sender has enough raw fragment balance:
+
+```json
+{"p":"edmt","op":"emt-mint","tick":"enat","blk":"1","fee":"12000000"}
+```
+
 These are invalid:
 
 ```json
@@ -198,6 +224,12 @@ These are invalid:
 
 ```json
 {"p":"edmt","op":"emt-transfer","tick":"enat","amt":"1","to":"0x1111111111111111111111111111111111111111"}
+```
+
+When capture fee applies, this is invalid because `fee` is missing:
+
+```json
+{"p":"edmt","op":"emt-mint","tick":"enat","blk":"1"}
 ```
 
 Unknown fields are ignored:

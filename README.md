@@ -47,6 +47,7 @@ eNAT is not a redemption claim on burned ETH. It is a provenance claim over a sp
 | Unit | gwei |
 | First ticker | `enat` |
 | Mint rule | One valid block can be claimed once |
+| Capture fee | Post-activation mint targets pay from raw fragment balance |
 | Conflict rule | First valid transaction in canonical chain order wins |
 | Transfer model | Whole holdings plus FIFO fragment balances |
 | Upgrade key | None at the protocol layer |
@@ -104,13 +105,14 @@ The protocol is not a contract API. It is a deterministic interpretation of publ
 | [`docs/protocol.md`](docs/protocol.md) | Authoritative protocol rules |
 | [`docs/indexer.md`](docs/indexer.md) | Required behavior for deterministic indexers |
 | [`docs/calldata.md`](docs/calldata.md) | Encoding guide and examples |
-| [`docs/examples/`](docs/examples) | Machine-readable JSON examples |
+| [`docs/examples/`](docs/examples) | Machine-readable JSON examples, including capture-fee mint payloads |
 
 ## Scope
 
 This repository contains:
 
 - protocol rules for deploy, mint, transfer, batch transfer, and burn;
+- capture-fee semantics for post-activation mint targets;
 - deterministic indexer behavior required for state convergence;
 - calldata encoding rules and examples.
 
@@ -130,6 +132,7 @@ A compliant indexer must:
 - compute `burn(N)` from Ethereum block headers using integer arithmetic;
 - process blocks and transactions in canonical order;
 - apply first-is-first mint resolution;
+- enforce capture fee for post-activation mint targets;
 - preserve the distinction between whole holdings and FIFO fragments;
 - implement atomic batch transfer;
 - treat protocol burn as distinct from zero-address transfer;

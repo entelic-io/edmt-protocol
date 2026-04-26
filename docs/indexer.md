@@ -118,6 +118,7 @@ For each `(tick, blk)`:
 
 - `owner`
 - `burn_amount`
+- `capture_fee_paid`
 - `mint_tx`
 - `mint_block`
 - `mint_tx_index`
@@ -177,15 +178,58 @@ For `emt-mint`:
 1. validate schema;
 2. verify ticker exists;
 3. parse `blk` as a decimal positive integer string;
-4. require `blk >= eip1559_activation_block`;
-5. require mint transaction block number `>= blk`;
-6. compute `burn(blk)`;
-7. require `burn(blk) >= 1`;
-8. require transaction `to == from`;
-9. require `(tick, blk)` not already claimed by an earlier valid mint;
-10. assign ownership to `tx.from`.
+4. parse `fee`, if present, as a decimal non-negative integer string;
+5. require `blk >= eip1559_activation_block`;
+6. require mint transaction block number `>= blk`;
+7. determine whether capture fee applies by comparing `blk` to `capture_fee_activation_block`;
+8. if capture fee applies, compute the required capture fee for the mint transaction block;
+9. if capture fee applies, require `fee` to be present and `fee >= required_capture_fee`;
+10. if capture fee applies, require sender fragment balance to be at least `fee`;
+11. if capture fee applies, consume `fee` from sender fragments FIFO and destroy it;
+12. compute `burn(blk)`;
+13. require `burn(blk) >= 1`;
+14. require transaction `to == from`;
+15. require `(tick, blk)` not already claimed by an earlier valid mint;
+16. assign ownership to `tx.from`.
 
 If multiple valid mint candidates for the same `(tick, blk)` appear in the same block, the lowest `transactionIndex` wins.
+
+Capture fee mutation and mint ownership mutation MUST be committed atomically. A mint that accepts with capture fee MUST both destroy the fee and assign the whole eNAT, or do neither.
+
+### 8.1 Capture Fee Quote
+
+For a mint transaction included in block `T`, the fee quote uses only blocks before `T`.
+
+Recommended deterministic parameters:
+
+| Parameter | Value |
+| --- | ---: |
+| `window_blocks` | `1000` |
+| `target_mint_rate_bps` | `3000` |
+| `min_multiplier_bps` | `2500` |
+| `max_multiplier_bps` | `40000` |
+
+Algorithm:
+
+```text
+window = previous window_blocks indexed blocks before T
+median_burn_gwei = median burn(block) over window
+future_mints = accepted mints in window whose target blk >= capture_fee_activation_block
+actual_mint_rate_bps = floor(future_mints * 10000 / window_blocks)
+raw_multiplier_bps = floor(actual_mint_rate_bps * 10000 / target_mint_rate_bps)
+multiplier_bps = clamp(raw_multiplier_bps, min_multiplier_bps, max_multiplier_bps)
+required_fee = ceil(median_burn_gwei * multiplier_bps / 10000)
+if capture fee applies and required_fee == 0:
+    required_fee = 1
+```
+
+The median rule for an even-sized window SHOULD use the lower median unless an implementation publishes a different deterministic median convention. All compliant indexers for the same protocol instance MUST use the same convention.
+
+### 8.2 Capture Fee FIFO Drain
+
+Capture fee consumes the sender's raw fragment FIFO queue oldest-to-newest. Whole holdings are not split to pay capture fee. If fragment balance is insufficient, the mint is rejected.
+
+The destroyed fee SHOULD be represented in the same burn accounting family as other protocol burns, with enough metadata to distinguish capture-fee destruction from user-initiated `emt-burn`.
 
 ## 9. Transfer Processing
 
@@ -340,9 +384,11 @@ A compliant indexer MUST:
 - verify chain context before starting;
 - process blocks and transactions in canonical order;
 - compute burn from block headers with integer arithmetic;
+- compute capture fee quotes from pre-transaction-block window data;
 - implement exact `data:,` JSON parsing rules;
 - distinguish ignore from reject;
 - implement first-is-first mint resolution;
+- enforce capture-fee presence, minimum amount, and fragment balance checks when required;
 - implement whole and fragment holdings separately;
 - preserve fragment FIFO entries;
 - implement `src = "<block_number>"` and `src = "balance"` exactly;
