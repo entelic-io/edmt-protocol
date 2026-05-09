@@ -10,7 +10,8 @@
   <img alt="Layer" src="https://img.shields.io/badge/layer-protocol-111111">
   <img alt="Contracts" src="https://img.shields.io/badge/contracts-none-111111">
   <img alt="Encoding" src="https://img.shields.io/badge/encoding-calldata-111111">
-  <img alt="License" src="https://img.shields.io/badge/license-CC--BY--4.0-111111">
+  <img alt="Docs License" src="https://img.shields.io/badge/docs-CC--BY--4.0-111111">
+  <img alt="Code License" src="https://img.shields.io/badge/code-MIT%20OR%20Apache--2.0-111111">
 </p>
 
 ---
@@ -98,6 +99,52 @@ flowchart LR
 
 The protocol is not a contract API. It is a deterministic interpretation of public Ethereum data.
 
+## Runnable Scanner
+
+<p align="center">
+  <img alt="Scanner" src="https://img.shields.io/badge/scanner-rust-111111">
+  <img alt="Mode" src="https://img.shields.io/badge/mode-calldata--only-111111">
+  <img alt="Output" src="https://img.shields.io/badge/output-jsonl-111111">
+  <img alt="State" src="https://img.shields.io/badge/state-none-111111">
+</p>
+
+This repository includes a minimal runnable scanner:
+
+[`implementations/rust/edmt-indexer-lite/`](implementations/rust/edmt-indexer-lite)
+
+It fetches Ethereum blocks through JSON-RPC, scans transaction `input` fields,
+recognizes `data:,` envelopes, parses known eDMT operation payloads, and writes
+JSONL records.
+
+```mermaid
+flowchart LR
+  RpcBlock["Ethereum JSON-RPC block"] --> TxInput["Transaction input"]
+  TxInput --> Envelope["data:, envelope"]
+  Envelope --> Scanner["edmt-indexer-lite"]
+  Scanner --> Jsonl["JSONL records"]
+```
+
+Quickstart:
+
+```sh
+cd implementations/rust/edmt-indexer-lite
+cargo run -- \
+  --rpc-url "https://example.invalid/rpc" \
+  --from-block 12965000 \
+  --to-block 12965010
+```
+
+Example output:
+
+```json
+{"block_number":12965000,"tx_hash":"0x...","classification":"parsed","operation":"emt-mint","payload":{"p":"edmt","op":"emt-mint","tick":"enat","blk":"12965000"}}
+```
+
+The scanner is deliberately not a full indexer. It does not maintain canonical
+balances, finality, reorg handling, capture fee accounting, or application
+state. A `parsed` record means the calldata envelope was parsed; it is not a
+state-validity claim.
+
 ## Repository Map
 
 | Path | Description |
@@ -106,6 +153,8 @@ The protocol is not a contract API. It is a deterministic interpretation of publ
 | [`docs/indexer.md`](docs/indexer.md) | Required behavior for deterministic indexers |
 | [`docs/calldata.md`](docs/calldata.md) | Encoding guide and examples |
 | [`docs/examples/`](docs/examples) | Machine-readable JSON examples, including capture-fee mint payloads |
+| [`docs/reference-indexer.md`](docs/reference-indexer.md) | Non-normative notes for the runnable Rust scanner |
+| [`implementations/rust/edmt-indexer-lite/`](implementations/rust/edmt-indexer-lite) | Minimal runnable calldata scanner and parser |
 
 ## Scope
 
@@ -114,11 +163,11 @@ This repository contains:
 - protocol rules for deploy, mint, transfer, batch transfer, and burn;
 - capture-fee semantics for post-activation mint targets;
 - deterministic indexer behavior required for state convergence;
-- calldata encoding rules and examples.
+- calldata encoding rules and examples;
+- a minimal non-normative Rust calldata scanner and parser.
 
 This repository does not contain:
 
-- indexer implementation code;
 - API implementation code;
 - frontend code;
 - deployment scripts;
@@ -142,4 +191,6 @@ See [Indexer Specification](docs/indexer.md) for the complete checklist.
 
 ## License
 
-The text in this repository is published under the Creative Commons Attribution 4.0 International license. See [LICENSE](LICENSE).
+Specification text and examples are published under the Creative Commons Attribution 4.0 International license. See [LICENSE](LICENSE).
+
+Code is published under `MIT OR Apache-2.0`. See [LICENSE-MIT](LICENSE-MIT) and [LICENSE-APACHE](LICENSE-APACHE).
